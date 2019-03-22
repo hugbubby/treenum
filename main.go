@@ -14,19 +14,33 @@ import (
 )
 
 func main() {
-	var config Config
-	if len(os.Args) > 1 {
-		config.ScriptDirName = os.Args[1]
-		config.Target = os.Args[2]
+	if os.Args[len(os.Args)-1] == "--nodetach" {
+		var config Config
+		config.Target = os.Args[1]
+		config.ScriptDirName = os.Args[2]
+		config.Load()
+
+		go startEnum(config)
+
+		sc := make(chan os.Signal, 1)
+		signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+		<-sc
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			log.Println(err)
+		} else {
+			os.Args = append(os.Args, "--nodetach")
+			log.Println(os.Args)
+			cmd := exec.Command(os.Args[0], os.Args[1:]...)
+			cmd.Dir = cwd
+			err = cmd.Start()
+			if err != nil {
+				log.Println(err)
+			}
+			cmd.Process.Release()
+		}
 	}
-	config.Load()
-
-	go startEnum(config)
-
-	log.Println("Autoenum is now running, CTRL-C or SIGINT to exit.")
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
-	<-sc
 }
 
 func startEnum(config Config) {
@@ -67,7 +81,7 @@ func enumPorts(config Config, openPorts <-chan Port) {
 }
 
 func enumPort(config Config, port Port) {
-	os.MkdirAll(config.GetOutputDirectory(), os.ModeDir|OS_USER_RWX|OS_ALL_R)
+	os.MkdirAll(config.GetOutputDirectory(), os.ModeDir|OS_USER_RWX|OS_ALL_R|OS_ALL_X)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -101,6 +115,7 @@ func enumPort(config Config, port Port) {
 						if !file.IsDir() &&
 							(file.Mode()&0111 != 0) /*File is globally executable*/ {
 							cmd := exec.Command(enumDir+"/"+file.Name(), config.Target, fmt.Sprint(port.Number), fmt.Sprint(port.Protocol))
+							log.Println("Running script:", cmd.Args)
 							cmd.Dir = config.GetOutputDirectory()
 							go cmd.Run()
 						}

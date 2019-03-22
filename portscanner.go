@@ -68,7 +68,8 @@ func UDPScan(target string, port int) (*PortStatus, error) {
 		nmap.WithTargets(target),
 		nmap.WithUDPScan(),
 		nmap.WithPorts(fmt.Sprint(port)))
-	if err == nil {
+	if err != nil {
+		log.Println(err)
 	} else {
 		scanResult, err := scanner.Run()
 		if err == nil {
