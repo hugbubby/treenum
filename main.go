@@ -14,10 +14,12 @@ import (
 )
 
 func main() {
-	config, _ := getConfig()
+	var config Config
 	if len(os.Args) > 1 {
-		config.Target = os.Args[1]
+		config.ScriptDirName = os.Args[1]
+		config.Target = os.Args[2]
 	}
+	config.Load()
 
 	go startEnum(config)
 
@@ -59,12 +61,13 @@ func enumPorts(config Config, openPorts <-chan Port) {
 	for {
 		port := <-openPorts
 		log.Println("Detected open port", port.Protocol, "/", port.Number)
-		go enumPort(config, baseDir+"/"+port.Protocol+"/"+fmt.Sprint(port.Number), port)
+		config.OutputDirectory = baseDir + "/" + port.Protocol + "/" + fmt.Sprint(port.Number)
+		go enumPort(config, port)
 	}
 }
 
-func enumPort(config Config, outputDir string, port Port) {
-	os.MkdirAll(outputDir, os.ModeDir|OS_USER_RWX|OS_ALL_R)
+func enumPort(config Config, port Port) {
+	os.MkdirAll(config.GetOutputDirectory(), os.ModeDir|OS_USER_RWX|OS_ALL_R)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -86,10 +89,10 @@ func enumPort(config Config, outputDir string, port Port) {
 	if err == nil {
 		result, err := scanner.Run()
 		if err == nil {
-			enumDir1 := os.Getenv("HOME") + "/.config/treenum/services/" + "all"
+			enumDir1 := config.GetScriptDir() + "/all"
 			host := result.Hosts[0]
 			portMap := host.Ports[0]
-			enumDir2 := os.Getenv("HOME") + "/.config/treenum/services/" + portMap.Service.Name
+			enumDir2 := config.GetScriptDir() + "/" + portMap.Service.Name
 			dirs := []string{enumDir1, enumDir2}
 			for _, enumDir := range dirs {
 				files, err := ioutil.ReadDir(enumDir)
@@ -98,7 +101,7 @@ func enumPort(config Config, outputDir string, port Port) {
 						if !file.IsDir() &&
 							(file.Mode()&0111 != 0) /*File is globally executable*/ {
 							cmd := exec.Command(enumDir+"/"+file.Name(), config.Target, fmt.Sprint(port.Number), fmt.Sprint(port.Protocol))
-							cmd.Dir = outputDir + "/"
+							cmd.Dir = config.GetOutputDirectory()
 							go cmd.Run()
 						}
 					}
