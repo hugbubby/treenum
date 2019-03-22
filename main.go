@@ -31,7 +31,6 @@ func main() {
 			log.Println(err)
 		} else {
 			os.Args = append(os.Args, "--nodetach")
-			log.Println(os.Args)
 			cmd := exec.Command(os.Args[0], os.Args[1:]...)
 			cmd.Dir = cwd
 			err = cmd.Start()
